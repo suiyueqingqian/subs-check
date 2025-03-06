@@ -21,15 +21,16 @@ type SaveConfig struct {
 	WorkerToken     string `yaml:"worker-token"`
 }
 type CheckConfig struct {
-	Concurrent      int      `yaml:"concurrent"`
-	Items           []string `yaml:"items"`
-	Interval        int      `yaml:"interval"`
-	Timeout         int      `yaml:"timeout"`
-	MinSpeed        int      `yaml:"min-speed"`
-	QualityLevel    int      `yaml:"quality-level"`
-	DownloadTimeout int      `yaml:"download-timeout"`
-	SpeedTestUrl    string   `yaml:"speed-test-url"`
-	SpeedSkipName   string   `yaml:"speed-skip-name"`
+	Concurrent           int      `yaml:"concurrent"`
+	Items                []string `yaml:"items"`
+	Interval             int      `yaml:"interval"`
+	Timeout              int      `yaml:"timeout"`
+	MinSpeed             int      `yaml:"min-speed"`
+	QualityLevel         int      `yaml:"quality-level"`
+	DownloadTimeout      int      `yaml:"download-timeout"`
+	SpeedTestUrl         string   `yaml:"speed-test-url"`
+	SpeedSkipName        string   `yaml:"speed-skip-name"`
+	SpeedCheckConcurrent int      `yaml:"speed-check-concurrent"`
 }
 type Config struct {
 	Check           CheckConfig  `yaml:"check"`

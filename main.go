@@ -232,7 +232,24 @@ func maintask() {
 
 	log.Info("check end %v proxies", aliveCount)
 
+	if utils.Contains(config.GlobalConfig.Check.Items, "speed") {
+		log.Info("start speed test")
+		pool.Tune(config.GlobalConfig.Check.SpeedCheckConcurrent)
+		for i := range proxies {
+			if proxies[i].Info.Alive {
+				wg.Add(1)
+				pool.Submit(func() {
+					defer wg.Done()
+					proxySpeedTask(&proxies[i])
+				})
+			}
+		}
+		wg.Wait()
+		log.Info("end speed test")
+	}
+
 	log.Info("start rename proxies")
+	pool.Tune(config.GlobalConfig.Check.Concurrent)
 	for i := range proxies {
 		if proxies[i].Info.Alive {
 			wg.Add(1)
@@ -279,11 +296,18 @@ func proxyCheckTask(proxy *info.Proxy) {
 				checker.NetflixTest()
 			case "disney":
 				checker.DisneyTest()
-			case "speed":
-				checker.CheckSpeed()
 			}
 		}
 	}
+}
+func proxySpeedTask(proxy *info.Proxy) {
+	if proxy.New() != nil {
+		return
+	}
+	defer proxy.Close()
+	checker := checker.NewChecker(proxy)
+	defer checker.Close()
+	checker.CheckSpeed()
 }
 func proxyRenameTask(proxy *info.Proxy) {
 	if proxy.New() != nil {
@@ -399,6 +423,9 @@ func checkConfig() {
 		log.Info("check items: none")
 	} else {
 		log.Info("check items: %v", config.GlobalConfig.Check.Items)
+		if utils.Contains(config.GlobalConfig.Check.Items, "speed") {
+			log.Info("speed check concurrent: %v", config.GlobalConfig.Check.SpeedCheckConcurrent)
+		}
 	}
 	if config.GlobalConfig.MihomoApiUrl != "" {
 		version, err := utils.GetVersion()
