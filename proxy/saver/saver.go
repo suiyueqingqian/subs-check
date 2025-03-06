@@ -32,7 +32,12 @@ func NewConfigSaver(results *[]info.Proxy) *ConfigSaver {
 				Proxies: make([]map[string]any, 0),
 				Filter: func(result info.Proxy) bool {
 					if utils.Contains(config.GlobalConfig.Check.Items, "speed") {
-						return result.Info.Speed > config.GlobalConfig.Check.MinSpeed
+						if result.Info.Speed > config.GlobalConfig.Check.MinSpeed || result.Info.SpeedSkip {
+							return true
+						} else {
+							log.Debug("proxy %s speed %d does not meet the condition, skipping", result.Raw["name"], result.Info.Speed)
+							return false
+						}
 					}
 					return result.Info.Alive
 				},

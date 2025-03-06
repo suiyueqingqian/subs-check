@@ -29,6 +29,7 @@ type CheckConfig struct {
 	QualityLevel    int      `yaml:"quality-level"`
 	DownloadTimeout int      `yaml:"download-timeout"`
 	SpeedTestUrl    string   `yaml:"speed-test-url"`
+	SpeedSkipName   string   `yaml:"speed-skip-name"`
 }
 type Config struct {
 	Check           CheckConfig  `yaml:"check"`

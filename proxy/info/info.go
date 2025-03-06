@@ -22,12 +22,15 @@ type Unlock struct {
 }
 
 type ProxyInfo struct {
-	Unlock  Unlock
-	Speed   int
-	Delay   uint16
-	Alive   bool
-	Country string
-	Flag    string
+	Unlock    Unlock
+	Speed     int
+	SpeedSkip bool
+	Rate      float32
+	Risk      int
+	Delay     uint16
+	Alive     bool
+	Country   string
+	Flag      string
 }
 
 type Proxy struct {

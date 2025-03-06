@@ -211,7 +211,6 @@ func maintask() {
 	var wg sync.WaitGroup
 
 	pool, _ := ants.NewPool(config.GlobalConfig.Check.Concurrent)
-	defer pool.Release()
 
 	for i := range proxies {
 		wg.Add(1)
@@ -250,6 +249,8 @@ func maintask() {
 	saver.SaveConfig(&proxies)
 
 	proxies = nil
+
+	pool.Release()
 
 	runtime.GC()
 }
@@ -300,13 +301,20 @@ func proxyRenameTask(proxy *info.Proxy) {
 			proxy.CountryCodeFromApi()
 		}
 	}
+
 	name := fmt.Sprintf("%v %03d", proxy.Info.Country, proxy.Id)
 	if config.GlobalConfig.Rename.Flag {
 		proxy.CountryFlag()
 		name = fmt.Sprintf("%v %v", proxy.Info.Flag, name)
 	}
 
-	if utils.Contains(config.GlobalConfig.Check.Items, "speed") {
+	proxy.ParseRate()
+
+	if proxy.Info.Rate != 0 {
+		name = fmt.Sprintf("%v x%.2f", name, proxy.Info.Rate)
+	}
+
+	if utils.Contains(config.GlobalConfig.Check.Items, "speed") && !proxy.Info.SpeedSkip {
 		speed := proxy.Info.Speed
 		var speedStr string
 		switch {
