@@ -101,6 +101,7 @@ func (cs *ConfigSaver) saveCategory(category ProxyCategory) error {
 		log.Warn("%s proxies are empty, skip", category.Name)
 		return nil
 	}
+	log.Debug("save %s category %v proxies", category.Name, len(category.Proxies))
 	yamlData, err := yaml.Marshal(map[string]any{
 		"proxies": category.Proxies,
 	})
