@@ -22,14 +22,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var (
-	mihomoProxies      []map[string]any
-	mihomoProxiesMutex sync.Mutex
-)
+var mihomoProxiesMutex sync.Mutex
 
 func GetProxies(proxies *[]info.Proxy) {
 	log.Info("currently, there are %d subscription links set", len(config.GlobalConfig.SubUrls))
-	mihomoProxies = mihomoProxies[:0]
 	numWorkers := min(len(config.GlobalConfig.SubUrls), config.GlobalConfig.Check.Concurrent)
 
 	pool, _ := ants.NewPool(numWorkers)
@@ -46,21 +42,17 @@ func GetProxies(proxies *[]info.Proxy) {
 }
 
 func taskGetProxies(args string, proxiesInfo *[]info.Proxy) {
+
 	data, err := getDateFromSubs(args)
 	if err != nil {
 		log.Warn("subscription link: %s get data failed: %v", log.MaskURL(args), err)
 		return
 	}
 	if IsYaml(data, args) {
-		proxies, err := ParseYamlProxy(data)
+		err := ParseYamlProxy(data, proxiesInfo)
 		if err != nil {
 			log.Warn("subscription link: %s has no proxies", log.MaskURL(args))
 			return
-		}
-		for _, proxy := range proxies {
-			mihomoProxiesMutex.Lock()
-			*proxiesInfo = append(*proxiesInfo, info.Proxy{Raw: proxy})
-			mihomoProxiesMutex.Unlock()
 		}
 	} else {
 		reg, _ := regexp.Compile(`^(ssr://|ss://|vmess://|trojan://|vless://|hysteria://|hy2://|hysteria2://)`)
@@ -80,7 +72,7 @@ func taskGetProxies(args string, proxiesInfo *[]info.Proxy) {
 					continue
 				}
 				mihomoProxiesMutex.Lock()
-				mihomoProxies = append(mihomoProxies, parseProxy)
+				*proxiesInfo = append(*proxiesInfo, info.Proxy{Raw: parseProxy})
 				mihomoProxiesMutex.Unlock()
 			}
 		}
@@ -154,10 +146,9 @@ func IsYaml(data []byte, subUrl string) bool {
 	}
 	return false
 }
-func ParseYamlProxy(data []byte) ([]map[string]any, error) {
+func ParseYamlProxy(data []byte, proxies *[]info.Proxy) error {
 	var inProxiesSection bool
 	var yamlBuffer bytes.Buffer
-	var proxies []map[string]any
 	var indent int
 	var isFirst bool = true
 
@@ -197,7 +188,9 @@ func ParseYamlProxy(data []byte) ([]map[string]any, error) {
 				if err := yaml.Unmarshal(yamlBuffer.Bytes(), &proxy); err != nil {
 
 				} else {
-					proxies = append(proxies, proxy...)
+					mihomoProxiesMutex.Lock()
+					*proxies = append(*proxies, info.Proxy{Raw: proxy[0]})
+					mihomoProxiesMutex.Unlock()
 				}
 				yamlBuffer.Reset()
 			}
@@ -211,9 +204,11 @@ func ParseYamlProxy(data []byte) ([]map[string]any, error) {
 		var proxy []map[string]any
 		if err := yaml.Unmarshal(yamlBuffer.Bytes(), &proxy); err != nil {
 		} else {
-			proxies = append(proxies, proxy...)
+			mihomoProxiesMutex.Lock()
+			*proxies = append(*proxies, info.Proxy{Raw: proxy[0]})
+			mihomoProxiesMutex.Unlock()
 		}
 	}
 
-	return proxies, nil
+	return nil
 }
