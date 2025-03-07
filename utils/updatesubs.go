@@ -96,7 +96,7 @@ func getNeedUpdateNames() ([]string, error) {
 
 	var names []string
 	for name, provider := range response.Providers {
-		if provider.VehicleType == "HTTP" {
+		if provider.VehicleType == "HTTP" || provider.VehicleType == "File" {
 			names = append(names, name)
 		}
 	}
