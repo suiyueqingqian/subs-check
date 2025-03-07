@@ -1,18 +1,18 @@
-
 # 是否打印进度 
 print-progress: false
 
+log-level: debug
+
+# 重命名方法 api 或 regex 或 mix
 rename:
-  # 重命名方法 api 或 regex 或 mix
-  method: mix
-  # 是否显示旗帜信息
-  flag: false
+  method: regex
+  flag: true
 
 check:
   # 并发
   concurrent: 100
   # 检查间隔,单位分钟
-  interval: 10
+  interval: 30
   # 超时时间 单位毫秒
   timeout: 2000
   # 最低测速 单位KB/s
@@ -21,33 +21,23 @@ check:
   download-timeout: 10
   # 测速地址
   speed-test-url: https://github.com/AaronFeng753/Waifu2x-Extension-GUI/releases/download/v3.121.12-beta/Update-W2xEX-v3.121.12-beta-FROM-v3.121.01.7z
-  # 检查项目（根据需要选择）
+  # 跳过测速的名称
+  speed-skip-name: 倍率|x\d+
+  # 测速并发
+  speed-check-concurrent: 1
+  # 检查项目
   items:
-    - openai # ChatGPT Android APP 是否可用
-    - youtube # YouTube 是否可用
-    - netflix # Netflix 是否可用
-    - disney # Disney+ 是否可用
-    - speed # 测速
+    # - openai
+    # - youtube
+    # - netflix
+    # - disney
+    # - speed
 
 save:
-  # 保存方法 webdav 或 http 或 gist 或 r2 或 local
-  method: webdav
-  # 使用http保存方式时需要的端口
-  port: 8080
-  # webdav
-  webdav-url: "https://webdav.company/dav"
-  webdav-username: "username"
-  webdav-password: "password"
-  # github token
-  github-token: ""
-  # gist id
-  github-gist-id: ""
-  # github api mirror
-  github-api-mirror: "https://your-worker-url.com/github"
-  #worker-url
-  worker-url: https://your-worker-url.com
-  #worker-token
-  worker-token: your-worker-token
+  # 保存方法 webdav 或 http 或 gist 或 r2
+  method: http
+  # 保存端口
+  port: 18989
 
 # mihomo api
 mihomo-api-url: "http://192.168.31.11:9090"
@@ -61,5 +51,5 @@ proxy:
   address: "http://192.168.31.11:7890" # 代理地址
 # 订阅链接
 sub-urls:
-  - https://example.com/sub1
-  - https://example.com/sub2
+  - https://your-sub-url/sub1
+  - https://your-sub-url/sub2

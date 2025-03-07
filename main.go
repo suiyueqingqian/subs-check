@@ -92,7 +92,10 @@ func (app *App) loadConfig() error {
 	yamlFile, err := os.ReadFile(app.configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return app.createDefaultConfig()
+			log.Error("config file not found: %v", err)
+			log.Info("Please refer to the docs to create config file: %v", app.configPath)
+			log.Info("Docs: https://github.com/bestruirui/BestSub/tree/master/doc")
+			os.Exit(1)
 		}
 		return fmt.Errorf("read config file failed: %w", err)
 	}
@@ -103,19 +106,6 @@ func (app *App) loadConfig() error {
 
 	info.CountryCodeRegexInit(app.renamePath)
 
-	return nil
-}
-
-func (app *App) createDefaultConfig() error {
-	log.Info("config file not found, create default config file")
-
-	if err := os.WriteFile(app.configPath, []byte(config.DefaultConfigTemplate), 0644); err != nil {
-		return fmt.Errorf("write default config file failed: %w", err)
-	}
-
-	log.Info("default config file created")
-	log.Info("please edit config file: %v", app.configPath)
-	os.Exit(0)
 	return nil
 }
 

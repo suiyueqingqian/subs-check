@@ -1,5 +1,13 @@
 # 配置文件详解
 
+### log level
+
+```yaml
+log-level: debug
+```
+
+可选值 `debug` `info` `warn` `error` 
+
 ### check
 
 ```yaml
@@ -24,9 +32,9 @@ check:
 - `concurrent`: 并发数量,此程序占用资源较少，并发可以设置较高
 - `timeout`: 超时时间 单位毫秒 节点的最大延迟
 - `interval`: 检测间隔时间 单位分钟 最低必须大于10分钟
-- `min-speed`: 最低测速 单位KB/s
+- `min-speed`: 最低测速 单位KB/s  低于此值的节点将在保存时被跳过
 - `speed-test-url`: 测速地址
-- `speed-skip-name`: 跳过测速的名称(正则表达式) 例如：`(倍率|x\d+(\.\d+)?|\d+(\.\d+)?x)`
+- `speed-skip-name`: 跳过测速的名称(正则表达式) 例如：`(倍率|x\d+(\.\d+)?|\d+(\.\d+)?x)` 可用于屏蔽高倍率节点，不参与测速
 - `speed-check-concurrent`: 测速并发(带宽小的可用适当调低，但调低后，检测速度会变慢)
 
 ### save
@@ -54,6 +62,7 @@ save:
 - gist:
   - `github-token`: gist token
   - `github-gist-id`: gist id
+  - `github-api-mirror`: 如不能直接访问github，可设置此选项为代理地址，参考[gist_zh.md](./gist_zh.md)
 - r2:
   - `worker-url`: worker url
   - `worker-token`: worker token
