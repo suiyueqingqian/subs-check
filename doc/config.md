@@ -52,9 +52,10 @@ save:
 ## mihomo
 
 ```yaml
-mihomo:
-  api-url: "http://192.168.31.11:9090"
-  api-secret: "mihomo-api-secret"
+# mihomo api
+mihomo-api-url: "http://192.168.31.11:9090"
+# mihomo api secret
+mihomo-api-secret: ""
 ```
 
 - `api-url`: Mihomo API URL
