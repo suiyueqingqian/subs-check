@@ -21,10 +21,14 @@ check:
   concurrent: 100
   timeout: 2000
   interval: 10
-  min-speed: 2048
+  download-timeout: 10
+  download-size: 50
   speed-test-url: 
+    - https://speed.cloudflare.com/__down?bytes=1073741824
+    - https://github.com/VSCodium/vscodium/releases/download/1.98.0.25067/codium-1.98.0.25067-el9.aarch64.rpm
   speed-skip-name: (倍率|x\d+(\.\d+)?|\d+(\.\d+)?x)
   speed-check-concurrent: 1
+  speed-count: 10
 ```
 
 
@@ -32,11 +36,12 @@ check:
 - `concurrent`: 并发数量,此程序占用资源较少，并发可以设置较高
 - `timeout`: 超时时间 单位毫秒 节点的最大延迟
 - `interval`: 检测间隔时间 单位分钟 最低必须大于10分钟
-- `min-speed`: 最低测速 单位KB/s  低于此值的节点将在保存时被跳过
-- `speed-test-url`: 测速地址
+- `download-timeout`: 下载超时时间 单位秒 测速时，下载文件的最大超时时间
+- `download-size`: 下载文件大小 单位MB 测速时，下载文件的大小
+- `speed-test-url`: 测速地址 会遍历所有地址，选择一个可用的进行测速
 - `speed-skip-name`: 跳过测速的名称(正则表达式) 例如：`(倍率|x\d+(\.\d+)?|\d+(\.\d+)?x)` 可用于屏蔽高倍率节点，不参与测速
 - `speed-check-concurrent`: 测速并发(带宽小的可用适当调低，但调低后，检测速度会变慢)
-
+- `speed-count`: 测速数量 测速时，从延迟最小的开始测试，直至达到 `speed-count` 个节点
 ### save
 
 ```yaml
