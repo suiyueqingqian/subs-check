@@ -263,11 +263,11 @@ func maintask() {
 							speedStr = fmt.Sprintf("%.2f GB/s", float64(proxies[i].Info.Speed)/(1024*1024))
 						}
 						proxies[i].Raw["name"] = fmt.Sprintf("%v | ⬇️ %s", proxies[i].Raw["name"], speedStr)
-					} else {
+					} else if !config.GlobalConfig.Check.SpeedSave {
 						proxies[i].Info.SpeedSkip = true
 					}
 				})
-			} else {
+			} else if !config.GlobalConfig.Check.SpeedSave {
 				proxies[i].Info.SpeedSkip = true
 			}
 		}
@@ -411,10 +411,17 @@ func checkConfig() {
 	} else {
 		log.Info("check items: %v", config.GlobalConfig.Check.Items)
 		if utils.Contains(config.GlobalConfig.Check.Items, "speed") {
+			if config.GlobalConfig.Check.SpeedCheckConcurrent <= 0 {
+				config.GlobalConfig.Check.SpeedCheckConcurrent = 3
+			}
 			log.Info(" - speed test concurrent: %v", config.GlobalConfig.Check.SpeedCheckConcurrent)
 			log.Info(" - speed test download size: %v MB", config.GlobalConfig.Check.DownloadSize)
 			log.Info(" - speed test download timeout: %v seconds", config.GlobalConfig.Check.DownloadTimeout)
-			log.Info(" - speed test count: %v", config.GlobalConfig.Check.SpeedCount)
+			if config.GlobalConfig.Check.SpeedCount <= 0 {
+				config.GlobalConfig.Check.SpeedCount = 10
+			} else {
+				log.Info(" - speed test count: %v", config.GlobalConfig.Check.SpeedCount)
+			}
 			if len(config.GlobalConfig.Check.SpeedTestUrl) == 0 {
 				log.Error("no speed test URLs available")
 				os.Exit(1)

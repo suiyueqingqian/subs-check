@@ -33,6 +33,7 @@ type CheckConfig struct {
 	SpeedSkipName        string   `yaml:"speed-skip-name"`
 	SpeedCheckConcurrent int      `yaml:"speed-check-concurrent"`
 	SpeedCount           int      `yaml:"speed-count"`
+	SpeedSave            bool     `yaml:"speed-save"`
 }
 type Config struct {
 	Check           CheckConfig  `yaml:"check"`
