@@ -28,9 +28,11 @@ type CheckConfig struct {
 	MinSpeed             int      `yaml:"min-speed"`
 	QualityLevel         int      `yaml:"quality-level"`
 	DownloadTimeout      int      `yaml:"download-timeout"`
-	SpeedTestUrl         string   `yaml:"speed-test-url"`
+	DownloadSize         int      `yaml:"download-size"`
+	SpeedTestUrl         []string `yaml:"speed-test-url"`
 	SpeedSkipName        string   `yaml:"speed-skip-name"`
 	SpeedCheckConcurrent int      `yaml:"speed-check-concurrent"`
+	SpeedCount           int      `yaml:"speed-count"`
 }
 type Config struct {
 	Check           CheckConfig  `yaml:"check"`

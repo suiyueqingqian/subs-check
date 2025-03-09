@@ -3,6 +3,7 @@ package checker
 import (
 	"context"
 	"io"
+	"math/rand"
 	"net/http"
 	"net/http/httptrace"
 	"time"
@@ -36,7 +37,7 @@ func (c *Checker) CheckSpeed() {
 		Transport: c.Proxy.Client.Transport,
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", config.GlobalConfig.Check.SpeedTestUrl, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", config.GlobalConfig.Check.SpeedTestUrl[rand.New(rand.NewSource(time.Now().UnixNano())).Intn(len(config.GlobalConfig.Check.SpeedTestUrl))], nil)
 	if err != nil {
 		return
 	}
@@ -58,7 +59,12 @@ func (c *Checker) CheckSpeed() {
 	}
 	defer resp.Body.Close()
 
-	totalBytes, err = io.Copy(io.Discard, resp.Body)
+	limitedReader := &io.LimitedReader{
+		R: resp.Body,
+		N: int64(config.GlobalConfig.Check.DownloadSize) * 1024 * 1024,
+	}
+
+	totalBytes, err = io.Copy(io.Discard, limitedReader)
 	if err != nil {
 		return
 	}
