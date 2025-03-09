@@ -1,13 +1,17 @@
 package checker
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"strings"
 )
 
 func (c *Checker) YoutubeTest() {
-	req, err := http.NewRequest("GET", "https://www.youtube.com/premium", nil)
+	ctx, cancel := context.WithCancel(c.Proxy.Ctx)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", "https://www.youtube.com/premium", nil)
 	if err != nil {
 		return
 	}

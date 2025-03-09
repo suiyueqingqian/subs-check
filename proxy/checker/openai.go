@@ -1,12 +1,23 @@
 package checker
 
 import (
+	"context"
 	"io"
+	"net/http"
 	"strings"
 )
 
 func (c *Checker) OpenaiTest() {
-	resp, err := c.Proxy.Client.Get("https://android.chat.openai.com")
+	ctx, cancel := context.WithCancel(c.Proxy.Ctx)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", "https://android.chat.openai.com", nil)
+	if err != nil {
+		return
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+
+	resp, err := c.Proxy.Client.Do(req)
 	if err != nil {
 		return
 	}

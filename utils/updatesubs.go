@@ -7,11 +7,8 @@ import (
 	"net/http"
 
 	"github.com/bestruirui/bestsub/config"
+	"github.com/bestruirui/bestsub/utils/log"
 )
-
-type httpClient interface {
-	Do(req *http.Request) (*http.Response, error)
-}
 
 type versionResponse struct {
 	Version string `json:"version"`
@@ -54,21 +51,21 @@ func makeRequest(method, url string) ([]byte, error) {
 
 func UpdateSubs() {
 	if config.GlobalConfig.MihomoApiUrl == "" {
-		LogWarn("MihomoApiUrl not configured, skipping update")
+		log.Warn("MihomoApiUrl not configured, skipping update")
 		return
 	}
 
 	names, err := getNeedUpdateNames()
 	if err != nil {
-		LogError("get need update subs failed: %v", err)
+		log.Error("get need update subs failed: %v", err)
 		return
 	}
 
 	if err := updateSubs(names); err != nil {
-		LogError("update subs failed: %v", err)
+		log.Error("update subs failed: %v", err)
 		return
 	}
-	LogInfo("subs updated")
+	log.Info("subs updated")
 }
 
 func GetVersion() (string, error) {
@@ -99,7 +96,7 @@ func getNeedUpdateNames() ([]string, error) {
 
 	var names []string
 	for name, provider := range response.Providers {
-		if provider.VehicleType == "HTTP" {
+		if provider.VehicleType == "HTTP" || provider.VehicleType == "File" {
 			names = append(names, name)
 		}
 	}
@@ -110,9 +107,9 @@ func updateSubs(names []string) error {
 	for _, name := range names {
 		url := fmt.Sprintf("%s/providers/proxies/%s", config.GlobalConfig.MihomoApiUrl, name)
 		if _, err := makeRequest(http.MethodPut, url); err != nil {
-			LogError("update sub %s failed: %v", name, err)
+			log.Error("update sub %s failed: %v", name, err)
 		}
-		LogInfo("update sub %s success", name)
+		log.Info("update sub %s success", name)
 	}
 	return nil
 }

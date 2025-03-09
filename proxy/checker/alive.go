@@ -1,16 +1,18 @@
 package checker
 
 import (
+	"context"
 	"net/http"
 	"time"
 )
 
 func (c *Checker) AliveTest(url string, expectedStatus int) {
+	ctx, cancel := context.WithCancel(c.Proxy.Ctx)
+	defer cancel()
 
 	start := time.Now()
 
-	req, err := http.NewRequest(http.MethodHead, url, nil)
-
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
 	if err != nil {
 		return
 	}

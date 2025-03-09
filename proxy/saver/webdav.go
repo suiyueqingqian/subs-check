@@ -9,6 +9,7 @@ import (
 
 	"github.com/bestruirui/bestsub/config"
 	"github.com/bestruirui/bestsub/utils"
+	"github.com/bestruirui/bestsub/utils/log"
 )
 
 var (
@@ -76,11 +77,11 @@ func (w *WebDAVUploader) uploadWithRetry(yamlData []byte, filename string) error
 	for attempt := 0; attempt < webdavMaxRetries; attempt++ {
 		if err := w.doUpload(yamlData, filename); err != nil {
 			lastErr = err
-			utils.LogError("webdav upload failed(attempt %d/%d): %v", attempt+1, webdavMaxRetries, err)
+			log.Error("webdav upload failed(attempt %d/%d): %v", attempt+1, webdavMaxRetries, err)
 			time.Sleep(webdavRetryDelay)
 			continue
 		}
-		utils.LogInfo("webdav upload success: %s", filename)
+		log.Info("webdav upload success: %s", filename)
 		return nil
 	}
 
@@ -92,7 +93,7 @@ func (w *WebDAVUploader) doUpload(yamlData []byte, filename string) error {
 	if err != nil {
 		return err
 	}
-
+	req.Close = true
 	resp, err := w.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("send request failed: %w", err)

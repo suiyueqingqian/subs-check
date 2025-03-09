@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/bestruirui/bestsub/config"
-	"github.com/bestruirui/bestsub/utils"
+	"github.com/bestruirui/bestsub/utils/log"
 )
 
 var (
@@ -194,11 +194,11 @@ func startHTTPServer() {
 	ips := getLocalIPs()
 
 	for _, ip := range ips {
-		utils.LogInfo("http server started at http://%s:%d", ip, config.GlobalConfig.Save.Port)
+		log.Info("http server started at http://%s:%d", ip, config.GlobalConfig.Save.Port)
 	}
 
 	if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		utils.LogInfo("http server error: %v", err)
+		log.Error("http server error: %v", err)
 	}
 }
 

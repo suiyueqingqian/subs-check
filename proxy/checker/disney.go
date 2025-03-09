@@ -1,6 +1,7 @@
 package checker
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,6 +10,9 @@ import (
 )
 
 func (c *Checker) DisneyTest() {
+	ctx, cancel := context.WithCancel(c.Proxy.Ctx)
+	defer cancel()
+
 	const (
 		cookie    = "grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Atoken-exchange&latitude=0&longitude=0&platform=browser&subject_token=DISNEYASSERTION&subject_token_type=urn%3Abamtech%3Aparams%3Aoauth%3Atoken-type%3Adevice"
 		assertion = `{"deviceFamily":"browser","applicationRuntime":"chrome","deviceProfile":"windows","attributes":{}}`
@@ -16,7 +20,7 @@ func (c *Checker) DisneyTest() {
 		userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
 	)
 
-	req, err := http.NewRequest("POST", "https://disney.api.edge.bamgrid.com/devices", strings.NewReader(assertion))
+	req, err := http.NewRequestWithContext(ctx, "POST", "https://disney.api.edge.bamgrid.com/devices", strings.NewReader(assertion))
 	if err != nil {
 		return
 	}
@@ -47,7 +51,7 @@ func (c *Checker) DisneyTest() {
 	}
 
 	tokenData := strings.Replace(cookie, "DISNEYASSERTION", assertionToken, 1)
-	req, err = http.NewRequest("POST", "https://disney.api.edge.bamgrid.com/token", strings.NewReader(tokenData))
+	req, err = http.NewRequestWithContext(ctx, "POST", "https://disney.api.edge.bamgrid.com/token", strings.NewReader(tokenData))
 	if err != nil {
 		return
 	}
@@ -83,7 +87,7 @@ func (c *Checker) DisneyTest() {
 
 	gqlQuery := fmt.Sprintf(`{"query":"mutation refreshToken($input: RefreshTokenInput!) {refreshToken(refreshToken: $input) {activeSession {sessionId}}}","variables":{"input":{"refreshToken":"%s"}}}`, refreshToken)
 
-	req, err = http.NewRequest("POST", "https://disney.api.edge.bamgrid.com/graph/v1/device/graphql", strings.NewReader(gqlQuery))
+	req, err = http.NewRequestWithContext(ctx, "POST", "https://disney.api.edge.bamgrid.com/graph/v1/device/graphql", strings.NewReader(gqlQuery))
 	if err != nil {
 		return
 	}

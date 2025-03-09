@@ -21,14 +21,19 @@ type SaveConfig struct {
 	WorkerToken     string `yaml:"worker-token"`
 }
 type CheckConfig struct {
-	Concurrent      int      `yaml:"concurrent"`
-	Items           []string `yaml:"items"`
-	Interval        int      `yaml:"interval"`
-	Timeout         int      `yaml:"timeout"`
-	MinSpeed        int      `yaml:"min-speed"`
-	QualityLevel    int      `yaml:"quality-level"`
-	DownloadTimeout int      `yaml:"download-timeout"`
-	SpeedTestUrl    string   `yaml:"speed-test-url"`
+	Concurrent           int      `yaml:"concurrent"`
+	Items                []string `yaml:"items"`
+	Interval             int      `yaml:"interval"`
+	Timeout              int      `yaml:"timeout"`
+	MinSpeed             int      `yaml:"min-speed"`
+	QualityLevel         int      `yaml:"quality-level"`
+	DownloadTimeout      int      `yaml:"download-timeout"`
+	DownloadSize         int      `yaml:"download-size"`
+	SpeedTestUrl         []string `yaml:"speed-test-url"`
+	SpeedSkipName        string   `yaml:"speed-skip-name"`
+	SpeedCheckConcurrent int      `yaml:"speed-check-concurrent"`
+	SpeedCount           int      `yaml:"speed-count"`
+	SpeedSave            bool     `yaml:"speed-save"`
 }
 type Config struct {
 	Check           CheckConfig  `yaml:"check"`
@@ -36,10 +41,12 @@ type Config struct {
 	Save            SaveConfig   `yaml:"save"`
 	SubUrlsReTry    int          `yaml:"sub-urls-retry"`
 	SubUrls         []string     `yaml:"sub-urls"`
+	TypeInclude     []string     `yaml:"type-include"`
 	MihomoApiUrl    string       `yaml:"mihomo-api-url"`
 	MihomoApiSecret string       `yaml:"mihomo-api-secret"`
 	Proxy           ProxyConfig  `yaml:"proxy"`
 	Rename          RenameConfig `yaml:"rename"`
+	LogLevel        string       `yaml:"log-level"`
 }
 
 var GlobalConfig Config

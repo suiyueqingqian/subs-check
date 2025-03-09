@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"sync"
 	"time"
 
 	"github.com/bestruirui/bestsub/config"
@@ -13,8 +15,10 @@ import (
 	"github.com/bestruirui/bestsub/proxy/info"
 	"github.com/bestruirui/bestsub/proxy/saver"
 	"github.com/bestruirui/bestsub/utils"
+	"github.com/bestruirui/bestsub/utils/log"
 	"github.com/fsnotify/fsnotify"
-	"github.com/metacubex/mihomo/log"
+	mihomoLog "github.com/metacubex/mihomo/log"
+	"github.com/panjf2000/ants/v2"
 	"gopkg.in/yaml.v3"
 )
 
@@ -38,20 +42,29 @@ func NewApp() *App {
 }
 
 func (app *App) Initialize() error {
+
 	if err := app.initConfigPath(); err != nil {
 		return fmt.Errorf("init config path failed: %w", err)
+
 	}
 
 	if err := app.loadConfig(); err != nil {
 		return fmt.Errorf("load config failed: %w", err)
 	}
+	if config.GlobalConfig.LogLevel != "" {
+		log.SetLogLevel(config.GlobalConfig.LogLevel)
+	} else {
+		log.SetLogLevel("info")
+	}
+
 	checkConfig()
+
 	if err := app.initConfigWatcher(); err != nil {
 		return fmt.Errorf("init config watcher failed: %w", err)
 	}
 
 	app.interval = config.GlobalConfig.Check.Interval
-	log.SetLevel(log.ERROR)
+	mihomoLog.SetLevel(mihomoLog.ERROR)
 	if config.GlobalConfig.Save.Method == "http" {
 		saver.StartHTTPServer()
 	}
@@ -79,7 +92,10 @@ func (app *App) loadConfig() error {
 	yamlFile, err := os.ReadFile(app.configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return app.createDefaultConfig()
+			log.Error("config file not found: %v", err)
+			log.Info("Please refer to the docs to create config file: %v", app.configPath)
+			log.Info("Docs: https://github.com/bestruirui/BestSub/tree/master/doc")
+			os.Exit(1)
 		}
 		return fmt.Errorf("read config file failed: %w", err)
 	}
@@ -88,23 +104,8 @@ func (app *App) loadConfig() error {
 		return fmt.Errorf("parse config file failed: %w", err)
 	}
 
-	utils.LogInfo("read config file success")
-
 	info.CountryCodeRegexInit(app.renamePath)
 
-	return nil
-}
-
-func (app *App) createDefaultConfig() error {
-	utils.LogInfo("config file not found, create default config file")
-
-	if err := os.WriteFile(app.configPath, []byte(config.DefaultConfigTemplate), 0644); err != nil {
-		return fmt.Errorf("write default config file failed: %w", err)
-	}
-
-	utils.LogInfo("default config file created")
-	utils.LogInfo("please edit config file: %v", app.configPath)
-	os.Exit(0)
 	return nil
 }
 
@@ -133,9 +134,9 @@ func (app *App) initConfigWatcher() error {
 
 					go func() {
 						<-app.reloadTimer.C
-						utils.LogInfo("config file changed, reloading")
+						log.Info("config file changed, reloading")
 						if err := app.loadConfig(); err != nil {
-							utils.LogError("reload config file failed: %v", err)
+							log.Error("reload config file failed: %v", err)
 							return
 						}
 						app.interval = config.GlobalConfig.Check.Interval
@@ -145,7 +146,7 @@ func (app *App) initConfigWatcher() error {
 				if !ok {
 					return
 				}
-				utils.LogError("config file watcher error: %v", err)
+				log.Error("config file watcher error: %v", err)
 			}
 		}
 	}()
@@ -154,7 +155,7 @@ func (app *App) initConfigWatcher() error {
 		return fmt.Errorf("add config file watcher failed: %w", err)
 	}
 
-	utils.LogInfo("config file watcher started")
+	log.Info("config file watcher started")
 	return nil
 }
 
@@ -170,7 +171,7 @@ func (app *App) Run() {
 		maintask()
 		utils.UpdateSubs()
 		nextCheck := time.Now().Add(time.Duration(app.interval) * time.Minute)
-		utils.LogInfo("next check time: %v", nextCheck.Format("2006-01-02 15:04:05"))
+		log.Info("next check time: %v", nextCheck.Format("2006-01-02 15:04:05"))
 		time.Sleep(time.Duration(app.interval) * time.Minute)
 	}
 }
@@ -180,72 +181,132 @@ func main() {
 	app := NewApp()
 
 	if err := app.Initialize(); err != nil {
-		utils.LogError("initialize failed: %v", err)
+		log.Error("initialize failed: %v", err)
 		os.Exit(1)
 	}
 
 	app.Run()
 }
 func maintask() {
+	proxies := make([]info.Proxy, 0)
 
-	proxies, err := proxy.GetProxies()
-	if err != nil {
+	proxy.GetProxies(&proxies)
+
+	log.Info("get proxies success: %v proxies", len(proxies))
+
+	info.DeduplicateProxies(&proxies)
+
+	log.Info("deduplicate proxies: %v proxies", len(proxies))
+
+	var wg sync.WaitGroup
+
+	pool, _ := ants.NewPool(config.GlobalConfig.Check.Concurrent)
+
+	for i := range proxies {
+		wg.Add(1)
+		i := i
+		pool.Submit(func() {
+			defer wg.Done()
+			proxyCheckTask(&proxies[i])
+		})
 	}
 
-	utils.LogInfo("get proxies success: %v proxies", len(proxies))
+	wg.Wait()
 
-	proxies = info.DeduplicateProxies(proxies)
-
-	utils.LogInfo("deduplicate proxies: %v proxies", len(proxies))
-
-	proxyTasks := make([]interface{}, len(proxies))
-	for i, proxy := range proxies {
-		proxyTasks[i] = proxy
-	}
-
-	pool := utils.NewThreadPool(config.GlobalConfig.Check.Concurrent, proxyAliveTask)
-	pool.Start()
-	pool.AddTaskArgs(proxyTasks)
-	pool.Wait()
-	results := pool.GetResults()
-	var success int
-	var successProxies []info.Proxy
-	for _, result := range results {
-		if result.Err != nil {
-			continue
-		}
-		proxy := result.Result.(*info.Proxy)
-		if proxy.Info.Alive {
-			success++
-			proxy.Id = success
-			successProxies = append(successProxies, *proxy)
+	for i := 0; i < len(proxies); {
+		if proxies[i].Info.Alive {
+			i++
+		} else {
+			proxies = append(proxies[:i], proxies[i+1:]...)
 		}
 	}
 
-	renameTasks := make([]interface{}, len(successProxies))
-	for i, proxy := range successProxies {
-		renameTasks[i] = proxy
-	}
-	pool = utils.NewThreadPool(config.GlobalConfig.Check.Concurrent, proxyRenameTask)
-	pool.Start()
-	pool.AddTaskArgs(renameTasks)
-	pool.Wait()
-	renameResults := pool.GetResults()
-	var renamedProxies []info.Proxy
-	for _, result := range renameResults {
-		if result.Err != nil {
-			continue
+	sort.Slice(proxies, func(i, j int) bool {
+		return proxies[i].Info.Delay < proxies[j].Info.Delay
+	})
+
+	for i := range proxies {
+		proxies[i].Id = i
+		name := fmt.Sprintf("%v %03d", proxies[i].Info.Country, proxies[i].Id)
+		if config.GlobalConfig.Rename.Flag {
+			proxies[i].CountryFlag()
+			name = fmt.Sprintf("%v %v", proxies[i].Info.Flag, name)
 		}
-		proxy := result.Result.(info.Proxy)
-		renamedProxies = append(renamedProxies, proxy)
+		proxies[i].ParseRate()
+		if proxies[i].Info.Rate != 0 {
+			name = fmt.Sprintf("%v x%.2f", name, proxies[i].Info.Rate)
+		}
+		proxies[i].Raw["name"] = name
 	}
-	utils.LogInfo("check and rename end %v proxies", len(renamedProxies))
-	saver.SaveConfig(renamedProxies)
+
+	log.Info("check end %v proxies", len(proxies))
+
+	if utils.Contains(config.GlobalConfig.Check.Items, "speed") {
+		log.Info("start speed test")
+		pool.Tune(config.GlobalConfig.Check.SpeedCheckConcurrent)
+		var speedCount int
+		for i := 0; i < len(proxies); i++ {
+			if speedCount < config.GlobalConfig.Check.SpeedCount {
+				wg.Add(1)
+				i := i
+				pool.Submit(func() {
+					defer wg.Done()
+					proxySpeedTask(&proxies[i])
+					if proxies[i].Info.Speed > config.GlobalConfig.Check.MinSpeed {
+						speedCount++
+						var speedStr string
+						switch {
+						case proxies[i].Info.Speed < 1024:
+							speedStr = fmt.Sprintf("%d KB/s", proxies[i].Info.Speed)
+						case proxies[i].Info.Speed < 1024*1024:
+							speedStr = fmt.Sprintf("%.2f MB/s", float64(proxies[i].Info.Speed)/1024)
+						default:
+							speedStr = fmt.Sprintf("%.2f GB/s", float64(proxies[i].Info.Speed)/(1024*1024))
+						}
+						proxies[i].Raw["name"] = fmt.Sprintf("%v | ⬇️ %s", proxies[i].Raw["name"], speedStr)
+					} else if !config.GlobalConfig.Check.SpeedSave {
+						proxies[i].Info.SpeedSkip = true
+					}
+				})
+			} else if !config.GlobalConfig.Check.SpeedSave {
+				proxies[i].Info.SpeedSkip = true
+			}
+		}
+		wg.Wait()
+		log.Info("end speed test")
+	}
+
+	saver.SaveConfig(&proxies)
+
+	proxies = nil
+
+	pool.Release()
+
 }
-func proxyAliveTask(task interface{}) (interface{}, error) {
-	proxy := proxy.NewProxy(task.(map[string]any))
+
+func proxyCheckTask(proxy *info.Proxy) {
+	if proxy.New() != nil {
+		return
+	}
+	defer proxy.Close()
 	checker := checker.NewChecker(proxy)
-	checker.AliveTest("https://gstatic.com/generate_204", 204)
+	defer checker.Close()
+	aliveCount := 0
+	totalDelay := uint16(0)
+	for i := 0; i < 3; i++ {
+		checker.AliveTest("https://gstatic.com/generate_204", 204)
+		if proxy.Info.Alive {
+			aliveCount++
+			totalDelay += proxy.Info.Delay
+		}
+	}
+
+	if aliveCount == 0 {
+		return
+	}
+
+	proxy.Info.Delay = totalDelay / uint16(aliveCount)
+
 	for _, item := range config.GlobalConfig.Check.Items {
 		switch item {
 		case "openai":
@@ -256,14 +317,8 @@ func proxyAliveTask(task interface{}) (interface{}, error) {
 			checker.NetflixTest()
 		case "disney":
 			checker.DisneyTest()
-		case "speed":
-			checker.CheckSpeed()
 		}
 	}
-	return proxy, nil
-}
-func proxyRenameTask(task interface{}) (interface{}, error) {
-	proxy := task.(info.Proxy)
 	switch config.GlobalConfig.Rename.Method {
 	case "api":
 		proxy.CountryCodeFromApi()
@@ -275,100 +330,116 @@ func proxyRenameTask(task interface{}) (interface{}, error) {
 			proxy.CountryCodeFromApi()
 		}
 	}
-	name := fmt.Sprintf("%v %03d", proxy.Info.Country, proxy.Id)
-	if config.GlobalConfig.Rename.Flag {
-		proxy.CountryFlag()
-		name = fmt.Sprintf("%v %v", proxy.Info.Flag, name)
-	}
 
-	if utils.Contains(config.GlobalConfig.Check.Items, "speed") {
-		speed := proxy.Info.Speed
-		var speedStr string
-		switch {
-		case speed < 1024:
-			speedStr = fmt.Sprintf("%d KB/s", speed)
-		case speed < 1024*1024:
-			speedStr = fmt.Sprintf("%.2f MB/s", float64(speed)/1024)
-		default:
-			speedStr = fmt.Sprintf("%.2f GB/s", float64(speed)/(1024*1024))
-		}
-		name = fmt.Sprintf("%v | ⬇️ %s", name, speedStr)
-	}
-
-	proxy.Raw["name"] = name
-	return proxy, nil
 }
+func proxySpeedTask(proxy *info.Proxy) {
+	if proxy.New() != nil {
+		return
+	}
+	defer proxy.Close()
+	checker := checker.NewChecker(proxy)
+	defer checker.Close()
+	checker.CheckSpeed()
+
+}
+
+var version string
+
 func checkConfig() {
+
+	log.Info("bestsub version: %v", version)
+
 	if config.GlobalConfig.Check.Concurrent <= 0 {
-		utils.LogError("concurrent must be greater than 0")
+		log.Error("concurrent must be greater than 0")
 		os.Exit(1)
 	}
-	utils.LogInfo("concurrents: %v", config.GlobalConfig.Check.Concurrent)
+	log.Info("concurrents: %v", config.GlobalConfig.Check.Concurrent)
 	switch config.GlobalConfig.Save.Method {
 	case "webdav":
 		if config.GlobalConfig.Save.WebDAVURL == "" {
-			utils.LogError("webdav-url is required when save-method is webdav")
+			log.Error("webdav-url is required when save-method is webdav")
 			os.Exit(1)
 		} else {
-			utils.LogInfo("save method: webdav")
+			log.Info("save method: webdav")
 		}
 	case "http":
 		if config.GlobalConfig.Save.Port <= 0 {
-			utils.LogError("port must be greater than 0 when save-method is http")
+			log.Error("port must be greater than 0 when save-method is http")
 			os.Exit(1)
 		} else {
-			utils.LogInfo("save method: http")
+			log.Info("save method: http")
 		}
 	case "gist":
 		if config.GlobalConfig.Save.GithubGistID == "" {
-			utils.LogError("github-gist-id is required when save-method is gist")
+			log.Error("github-gist-id is required when save-method is gist")
 			os.Exit(1)
 		}
 		if config.GlobalConfig.Save.GithubToken == "" {
-			utils.LogError("github-token is required when save-method is gist")
+			log.Error("github-token is required when save-method is gist")
 			os.Exit(1)
 		}
-		utils.LogInfo("save method: gist")
+		log.Info("save method: gist")
 	}
 	if config.GlobalConfig.SubUrls == nil {
-		utils.LogError("sub-urls is required")
+		log.Error("sub-urls is required")
 		os.Exit(1)
 	}
 	switch config.GlobalConfig.Rename.Method {
 	case "api":
-		utils.LogInfo("rename method: api")
+		log.Info("rename method: api")
 	case "regex":
-		utils.LogInfo("rename method: regex")
+		log.Info("rename method: regex")
 	case "mix":
-		utils.LogInfo("rename method: mix")
+		log.Info("rename method: mix")
 	default:
-		utils.LogError("rename-method must be one of api, regex, mix")
+		log.Error("rename-method must be one of api, regex, mix")
 		os.Exit(1)
 	}
 	if config.GlobalConfig.Proxy.Type == "http" {
-		utils.LogInfo("proxy type: http")
+		log.Info("proxy type: http")
 	} else if config.GlobalConfig.Proxy.Type == "socks" {
-		utils.LogInfo("proxy type: socks")
+		log.Info("proxy type: socks")
 	} else {
-		utils.LogInfo("not use proxy")
+		log.Info("not use proxy")
 	}
-	utils.LogInfo("progress display: %v", config.GlobalConfig.PrintProgress)
+	log.Info("progress display: %v", config.GlobalConfig.PrintProgress)
 	if config.GlobalConfig.Check.Interval < 10 {
-		utils.LogError("check-interval must be greater than 10 minutes")
+		log.Error("check-interval must be greater than 10 minutes")
 		os.Exit(1)
 	}
 	if len(config.GlobalConfig.Check.Items) == 0 {
-		utils.LogInfo("check items: none")
+		log.Info("check items: none")
 	} else {
-		utils.LogInfo("check items: %v", config.GlobalConfig.Check.Items)
+		log.Info("check items: %v", config.GlobalConfig.Check.Items)
+		if utils.Contains(config.GlobalConfig.Check.Items, "speed") {
+			if config.GlobalConfig.Check.SpeedCheckConcurrent <= 0 {
+				config.GlobalConfig.Check.SpeedCheckConcurrent = 3
+			}
+			log.Info(" - speed test concurrent: %v", config.GlobalConfig.Check.SpeedCheckConcurrent)
+			log.Info(" - speed test download size: %v MB", config.GlobalConfig.Check.DownloadSize)
+			log.Info(" - speed test download timeout: %v seconds", config.GlobalConfig.Check.DownloadTimeout)
+			if config.GlobalConfig.Check.SpeedCount <= 0 {
+				config.GlobalConfig.Check.SpeedCount = 10
+			} else {
+				log.Info(" - speed test count: %v", config.GlobalConfig.Check.SpeedCount)
+			}
+			if len(config.GlobalConfig.Check.SpeedTestUrl) == 0 {
+				log.Error("no speed test URLs available")
+				os.Exit(1)
+			}
+		}
 	}
+	if len(config.GlobalConfig.TypeInclude) > 0 {
+		log.Info("type include: %v", config.GlobalConfig.TypeInclude)
+	}
+
 	if config.GlobalConfig.MihomoApiUrl != "" {
 		version, err := utils.GetVersion()
 		if err != nil {
-			utils.LogError("get version failed: %v", err)
+			log.Error("get version failed: %v", err)
 		} else {
-			utils.LogInfo("auto update provider: true")
-			utils.LogInfo("mihomo version: %v", version)
+			log.Info("auto update provider: true")
+			log.Info("mihomo version: %v", version)
 		}
 	}
 }

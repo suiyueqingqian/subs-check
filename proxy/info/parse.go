@@ -1,20 +1,25 @@
 package info
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
-	"github.com/bestruirui/bestsub/utils"
+	"github.com/bestruirui/bestsub/utils/log"
 	"github.com/dlclark/regexp2"
 	"gopkg.in/yaml.v3"
 )
 
 func (p *Proxy) CountryCodeFromApi() {
+	ctx, cancel := context.WithCancel(p.Ctx)
+	defer cancel()
+
 	apis := []string{
 		"https://api.ip.sb/geoip",
 		"https://ipapi.co/json",
@@ -25,7 +30,7 @@ func (p *Proxy) CountryCodeFromApi() {
 
 	for _, api := range apis {
 		for attempts := 0; attempts < 5; attempts++ {
-			req, err := http.NewRequest("GET", api, nil)
+			req, err := http.NewRequestWithContext(ctx, "GET", api, nil)
 			if err != nil {
 				time.Sleep(time.Second * time.Duration(attempts))
 				continue
@@ -94,13 +99,13 @@ func (p *Proxy) CountryCodeFromApi() {
 			}
 		}
 	}
-	if countryCode == "" {
+	if len(countryCode) == 0 {
 		p.Info.Country = "UN"
+	} else {
+		p.Info.Country = countryCode
 	}
-	p.Info.Country = countryCode
 }
 func getFlag(countryCode string) string {
-
 	code := strings.ToUpper(countryCode)
 
 	const flagBase = 127397
@@ -124,15 +129,15 @@ var CountryCodeRegex []Country
 func CountryCodeRegexInit(renamePath string) {
 	data, err := os.ReadFile(renamePath)
 	if err != nil {
-		utils.LogError("read rename file failed: %v", err)
-		utils.LogInfo("please download rename file from https://github.com/bestruirui/BestSub/tree/master/doc/rename.yaml")
+		log.Error("read rename file failed: %v", err)
+		log.Info("please download rename file from https://github.com/bestruirui/BestSub/tree/master/doc/rename.yaml")
 		os.Exit(1)
 	}
 
 	err = yaml.Unmarshal(data, &CountryCodeRegex)
 	if err != nil {
-		utils.LogError("parse rename file failed: %v", err)
-		utils.LogInfo("please download rename file from https://github.com/bestruirui/BestSub/tree/master/doc/rename.yaml")
+		log.Error("parse rename file failed: %v", err)
+		log.Info("please download rename file from https://github.com/bestruirui/BestSub/tree/master/doc/rename.yaml")
 		os.Exit(1)
 	}
 }
@@ -151,4 +156,32 @@ func (p *Proxy) CountryCodeRegex() {
 		}
 	}
 	p.Info.Country = "UN"
+}
+
+var rateRegex = regexp2.MustCompile(`(?:倍率|x(?<value>\d+(?:\.\d+)?))`, regexp2.None)
+
+func (p *Proxy) ParseRate() {
+
+	match, err := rateRegex.FindStringMatch(p.Raw["name"].(string))
+	if err != nil {
+		log.Debug("parse rate failed: %v", err)
+		return
+	}
+
+	if match != nil {
+		valueGroup := match.GroupByName("value")
+		if valueGroup != nil && len(valueGroup.Captures) > 0 {
+			rateValue := valueGroup.Captures[0].String()
+			rate, err := strconv.ParseFloat(rateValue, 64)
+			if err != nil {
+				log.Debug("parse rate value failed: %v", err)
+				return
+			}
+			p.Info.Rate = float32(rate)
+			log.Debug("parse proxy %s rate value: %v", p.Raw["name"], p.Info.Rate)
+		} else {
+			log.Debug("Rate value not found")
+		}
+		return
+	}
 }

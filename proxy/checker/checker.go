@@ -13,3 +13,9 @@ func NewChecker(proxy *info.Proxy) *Checker {
 		Proxy: proxy,
 	}
 }
+
+func (c *Checker) Close() {
+	if c.Proxy != nil {
+		c.Proxy.Close()
+	}
+}

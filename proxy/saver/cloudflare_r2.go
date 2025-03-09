@@ -10,6 +10,7 @@ import (
 
 	"github.com/bestruirui/bestsub/config"
 	"github.com/bestruirui/bestsub/utils"
+	"github.com/bestruirui/bestsub/utils/log"
 )
 
 const (
@@ -88,11 +89,11 @@ func (r *R2Uploader) uploadWithRetry(jsonData []byte, filename string) error {
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		if err := r.doUpload(jsonData); err != nil {
 			lastErr = err
-			utils.LogError("upload failed(attempt %d/%d): %v", attempt+1, maxRetries, err)
+			log.Error("upload failed(attempt %d/%d): %v", attempt+1, maxRetries, err)
 			time.Sleep(retryInterval)
 			continue
 		}
-		utils.LogInfo("upload success: %s", filename)
+		log.Info("upload success: %s", filename)
 		return nil
 	}
 

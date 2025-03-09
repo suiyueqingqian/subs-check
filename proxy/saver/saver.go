@@ -6,6 +6,7 @@ import (
 	"github.com/bestruirui/bestsub/config"
 	"github.com/bestruirui/bestsub/proxy/info"
 	"github.com/bestruirui/bestsub/utils"
+	"github.com/bestruirui/bestsub/utils/log"
 	"gopkg.in/yaml.v3"
 )
 
@@ -16,12 +17,12 @@ type ProxyCategory struct {
 }
 
 type ConfigSaver struct {
-	results    []info.Proxy
+	results    *[]info.Proxy
 	categories []ProxyCategory
 	saveMethod func([]byte, string) error
 }
 
-func NewConfigSaver(results []info.Proxy) *ConfigSaver {
+func NewConfigSaver(results *[]info.Proxy) *ConfigSaver {
 	return &ConfigSaver{
 		results:    results,
 		saveMethod: chooseSaveMethod(),
@@ -31,9 +32,14 @@ func NewConfigSaver(results []info.Proxy) *ConfigSaver {
 				Proxies: make([]map[string]any, 0),
 				Filter: func(result info.Proxy) bool {
 					if utils.Contains(config.GlobalConfig.Check.Items, "speed") {
-						return result.Info.Speed > config.GlobalConfig.Check.MinSpeed
+						if result.Info.Speed > config.GlobalConfig.Check.MinSpeed || result.Info.SpeedSkip {
+							return true
+						} else {
+							log.Debug("proxy %s speed %d does not meet the condition, skipping", result.Raw["name"], result.Info.Speed)
+							return false
+						}
 					}
-					return true
+					return result.Info.Alive
 				},
 			},
 			{
@@ -60,10 +66,10 @@ func NewConfigSaver(results []info.Proxy) *ConfigSaver {
 	}
 }
 
-func SaveConfig(results []info.Proxy) {
+func SaveConfig(results *[]info.Proxy) {
 	saver := NewConfigSaver(results)
 	if err := saver.Save(); err != nil {
-		utils.LogError("save config failed: %v", err)
+		log.Error("save config failed: %v", err)
 	}
 }
 
@@ -72,7 +78,7 @@ func (cs *ConfigSaver) Save() error {
 
 	for _, category := range cs.categories {
 		if err := cs.saveCategory(category); err != nil {
-			utils.LogError("save %s category failed: %v", category.Name, err)
+			log.Error("save %s category failed: %v", category.Name, err)
 			continue
 		}
 	}
@@ -81,7 +87,7 @@ func (cs *ConfigSaver) Save() error {
 }
 
 func (cs *ConfigSaver) categorizeProxies() {
-	for _, result := range cs.results {
+	for _, result := range *cs.results {
 		for i := range cs.categories {
 			if cs.categories[i].Filter(result) {
 				cs.categories[i].Proxies = append(cs.categories[i].Proxies, result.Raw)
@@ -92,9 +98,10 @@ func (cs *ConfigSaver) categorizeProxies() {
 
 func (cs *ConfigSaver) saveCategory(category ProxyCategory) error {
 	if len(category.Proxies) == 0 {
-		utils.LogWarn("%s proxies are empty, skip", category.Name)
+		log.Warn("%s proxies are empty, skip", category.Name)
 		return nil
 	}
+	log.Debug("save %s category %v proxies", category.Name, len(category.Proxies))
 	yamlData, err := yaml.Marshal(map[string]any{
 		"proxies": category.Proxies,
 	})
@@ -112,19 +119,19 @@ func chooseSaveMethod() func([]byte, string) error {
 	switch config.GlobalConfig.Save.Method {
 	case "r2":
 		if err := ValiR2Config(); err != nil {
-			utils.LogError("R2 config is incomplete: %v ,use local save", err)
+			log.Error("R2 config is incomplete: %v ,use local save", err)
 			return SaveToLocal
 		}
 		return UploadToR2Storage
 	case "gist":
 		if err := ValiGistConfig(); err != nil {
-			utils.LogError("Gist config is incomplete: %v ,use local save", err)
+			log.Error("Gist config is incomplete: %v ,use local save", err)
 			return SaveToLocal
 		}
 		return UploadToGist
 	case "webdav":
 		if err := ValiWebDAVConfig(); err != nil {
-			utils.LogError("WebDAV config is incomplete: %v ,use local save", err)
+			log.Error("WebDAV config is incomplete: %v ,use local save", err)
 			return SaveToLocal
 		}
 		return UploadToWebDAV
@@ -132,12 +139,12 @@ func chooseSaveMethod() func([]byte, string) error {
 		return SaveToLocal
 	case "http":
 		if err := ValiHTTPConfig(); err != nil {
-			utils.LogError("HTTP config is incomplete: %v ,use local save", err)
+			log.Error("HTTP config is incomplete: %v ,use local save", err)
 			return SaveToLocal
 		}
 		return SaveToHTTP
 	default:
-		utils.LogError("unknown save method: %s, use local save", config.GlobalConfig.Save.Method)
+		log.Error("unknown save method: %s, use local save", config.GlobalConfig.Save.Method)
 		return SaveToLocal
 	}
 }

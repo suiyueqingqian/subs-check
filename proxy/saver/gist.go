@@ -10,6 +10,7 @@ import (
 
 	"github.com/bestruirui/bestsub/config"
 	"github.com/bestruirui/bestsub/utils"
+	"github.com/bestruirui/bestsub/utils/log"
 )
 
 var (
@@ -105,11 +106,11 @@ func (g *GistUploader) uploadWithRetry(jsonData []byte, filename string) error {
 	for attempt := 0; attempt < gistMaxRetries; attempt++ {
 		if err := g.doUpload(jsonData); err != nil {
 			lastErr = err
-			utils.LogError("gist upload failed(attempt %d/%d): %v", attempt+1, gistMaxRetries, err)
+			log.Error("gist upload failed(attempt %d/%d): %v", attempt+1, gistMaxRetries, err)
 			time.Sleep(gistRetryDelay)
 			continue
 		}
-		utils.LogInfo("gist upload success: %s", filename)
+		log.Info("gist upload success: %s", filename)
 		return nil
 	}
 
