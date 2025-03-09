@@ -33,63 +33,62 @@ func (c *Checker) CheckSpeed() {
 		Transport: c.Proxy.Client.Transport,
 	}
 
-	successChan := make(chan *http.Response, 1)
-	ctx, cancel := context.WithCancel(c.Proxy.Ctx)
-	defer cancel()
-
 	var startTime time.Time
+	var resp *http.Response
 
 	for _, url := range config.GlobalConfig.Check.SpeedTestUrl {
-		go func(testUrl string) {
-			req, err := http.NewRequestWithContext(ctx, "GET", testUrl, nil)
-			if err != nil {
-				return
-			}
+		reqCtx, cancel := context.WithTimeout(c.Proxy.Ctx, time.Duration(config.GlobalConfig.Check.Timeout)*time.Second)
+		defer cancel()
 
-			trace := &httptrace.ClientTrace{
-				GotFirstResponseByte: func() {
-					startTime = time.Now()
-				},
-			}
-			req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
+		req, err := http.NewRequestWithContext(reqCtx, "GET", url, nil)
+		if err != nil {
+			continue
+		}
 
-			resp, err := speedClient.Do(req)
-			if err != nil {
-				return
-			}
+		trace := &httptrace.ClientTrace{
+			GotFirstResponseByte: func() {
+				startTime = time.Now()
+			},
+		}
+		req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
 
-			select {
-			case successChan <- resp:
-			default:
-				resp.Body.Close()
-			}
-		}(url)
+		resp, err = speedClient.Do(req)
+		if err != nil {
+			continue
+		}
+
+		var totalBytes int64
+		limitedReader := &io.LimitedReader{
+			R: resp.Body,
+			N: int64(config.GlobalConfig.Check.DownloadSize) * 1024 * 1024,
+		}
+
+		copyCtx, copyCancel := context.WithTimeout(c.Proxy.Ctx, time.Duration(config.GlobalConfig.Check.DownloadTimeout)*time.Second)
+		defer copyCancel()
+
+		done := make(chan struct{})
+		go func() {
+			totalBytes, err = io.Copy(io.Discard, limitedReader)
+			close(done)
+		}()
+
+		select {
+		case <-done:
+		case <-copyCtx.Done():
+			err = copyCtx.Err()
+		}
+
+		resp.Body.Close()
+		if err != nil {
+			continue
+		}
+
+		duration := time.Since(startTime).Milliseconds()
+		if duration == 0 {
+			duration = 1
+		}
+
+		c.Proxy.Info.Speed = int(float64(totalBytes) / 1024 * 1000 / float64(duration))
+		break
 	}
-
-	var resp *http.Response
-	select {
-	case resp = <-successChan:
-	case <-time.After(time.Duration(config.GlobalConfig.Check.DownloadTimeout) * time.Second):
-		return
-	}
-	defer resp.Body.Close()
-
-	var totalBytes int64
-
-	limitedReader := &io.LimitedReader{
-		R: resp.Body,
-		N: int64(config.GlobalConfig.Check.DownloadSize) * 1024 * 1024,
-	}
-
-	totalBytes, err := io.Copy(io.Discard, limitedReader)
-	if err != nil {
-		return
-	}
-
-	duration := time.Since(startTime).Milliseconds()
-	if duration == 0 {
-		duration = 1
-	}
-
-	c.Proxy.Info.Speed = int(float64(totalBytes) / 1024 * 1000 / float64(duration))
 }
