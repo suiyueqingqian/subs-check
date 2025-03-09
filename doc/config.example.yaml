@@ -31,6 +31,8 @@ check:
   speed-check-concurrent: 1
   # Speed test count
   speed-count: 10
+  # Speed save
+  speed-save: true
   # Items to check
   items:
     - openai

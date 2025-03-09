@@ -31,6 +31,8 @@ check:
   speed-check-concurrent: 1
   # 测速数量
   speed-count: 10
+  # 测速保存
+  speed-save: true
   # 检查项目
   items:
     - openai

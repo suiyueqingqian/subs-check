@@ -29,6 +29,7 @@ check:
   speed-skip-name: (倍率|x\d+(\.\d+)?|\d+(\.\d+)?x)
   speed-check-concurrent: 1
   speed-count: 10
+  speed-save: false
 ```
 
 
@@ -42,6 +43,10 @@ check:
 - `speed-skip-name`: 跳过测速的名称(正则表达式) 例如：`(倍率|x\d+(\.\d+)?|\d+(\.\d+)?x)` 可用于屏蔽高倍率节点，不参与测速
 - `speed-check-concurrent`: 测速并发(带宽小的可用适当调低，但调低后，检测速度会变慢)
 - `speed-count`: 测速数量 测速时，从延迟最小的开始测试，直至达到 `speed-count` 个节点
+- `speed-save`: 测速保存
+  > 设置为 `false` 时 会保存所有的结果包括速度不达标的  
+  > 设置为 `true` 时 只保存速度达标的
+
 ### save
 
 ```yaml
