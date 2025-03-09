@@ -428,6 +428,9 @@ func checkConfig() {
 			}
 		}
 	}
+	if len(config.GlobalConfig.TypeInclude) > 0 {
+		log.Info("type include: %v", config.GlobalConfig.TypeInclude)
+	}
 
 	if config.GlobalConfig.MihomoApiUrl != "" {
 		version, err := utils.GetVersion()

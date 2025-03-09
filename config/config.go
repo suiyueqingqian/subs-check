@@ -41,6 +41,7 @@ type Config struct {
 	Save            SaveConfig   `yaml:"save"`
 	SubUrlsReTry    int          `yaml:"sub-urls-retry"`
 	SubUrls         []string     `yaml:"sub-urls"`
+	TypeInclude     []string     `yaml:"type-include"`
 	MihomoApiUrl    string       `yaml:"mihomo-api-url"`
 	MihomoApiSecret string       `yaml:"mihomo-api-secret"`
 	Proxy           ProxyConfig  `yaml:"proxy"`
