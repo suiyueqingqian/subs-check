@@ -58,6 +58,9 @@ proxy:
   type: "http" # 可选值: http, socks
   address: "http://192.168.31.11:7890" # 代理地址
 # 订阅链接
+# type-include:
+#   - ss
+#   - vmess
 sub-urls:
   - https://your-sub-url/sub1
   - https://your-sub-url/sub2

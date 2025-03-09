@@ -71,6 +71,9 @@ proxy:
   type: "http" # Options: http, socks
   address: "http://192.168.31.11:7890" # Proxy address
 # Subscription URLs
+# type-include:
+#   - ss
+#   - vmess
 sub-urls:
   - https://example.com/sub1
   - https://example.com/sub2
