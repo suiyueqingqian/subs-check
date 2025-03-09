@@ -3,7 +3,6 @@ package checker
 import (
 	"context"
 	"io"
-	"math/rand"
 	"net/http"
 	"net/http/httptrace"
 	"time"
@@ -29,42 +28,60 @@ func (c *Checker) CheckSpeed() {
 		}
 	}
 
-	ctx, cancel := context.WithCancel(c.Proxy.Ctx)
-	defer cancel()
-
 	speedClient := &http.Client{
 		Timeout:   time.Duration(config.GlobalConfig.Check.DownloadTimeout) * time.Second,
 		Transport: c.Proxy.Client.Transport,
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", config.GlobalConfig.Check.SpeedTestUrl[rand.New(rand.NewSource(time.Now().UnixNano())).Intn(len(config.GlobalConfig.Check.SpeedTestUrl))], nil)
-	if err != nil {
-		return
-	}
+	successChan := make(chan *http.Response, 1)
+	ctx, cancel := context.WithCancel(c.Proxy.Ctx)
+	defer cancel()
 
 	var startTime time.Time
-	var totalBytes int64
 
-	trace := &httptrace.ClientTrace{
-		GotFirstResponseByte: func() {
-			startTime = time.Now()
-		},
+	for _, url := range config.GlobalConfig.Check.SpeedTestUrl {
+		go func(testUrl string) {
+			req, err := http.NewRequestWithContext(ctx, "GET", testUrl, nil)
+			if err != nil {
+				return
+			}
+
+			trace := &httptrace.ClientTrace{
+				GotFirstResponseByte: func() {
+					startTime = time.Now()
+				},
+			}
+			req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
+
+			resp, err := speedClient.Do(req)
+			if err != nil {
+				return
+			}
+
+			select {
+			case successChan <- resp:
+			default:
+				resp.Body.Close()
+			}
+		}(url)
 	}
 
-	req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
-
-	resp, err := speedClient.Do(req)
-	if err != nil {
+	var resp *http.Response
+	select {
+	case resp = <-successChan:
+	case <-time.After(time.Duration(config.GlobalConfig.Check.DownloadTimeout) * time.Second):
 		return
 	}
 	defer resp.Body.Close()
+
+	var totalBytes int64
 
 	limitedReader := &io.LimitedReader{
 		R: resp.Body,
 		N: int64(config.GlobalConfig.Check.DownloadSize) * 1024 * 1024,
 	}
 
-	totalBytes, err = io.Copy(io.Discard, limitedReader)
+	totalBytes, err := io.Copy(io.Discard, limitedReader)
 	if err != nil {
 		return
 	}
