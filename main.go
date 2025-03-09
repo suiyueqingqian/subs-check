@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
+	"sort"
 	"sync"
 	"time"
 
@@ -211,47 +211,69 @@ func maintask() {
 	}
 
 	wg.Wait()
-	var aliveCount int = 0
 
-	for i := range proxies {
+	for i := 0; i < len(proxies); {
 		if proxies[i].Info.Alive {
-			proxies[i].Id = aliveCount
-			aliveCount++
+			i++
+		} else {
+			proxies = append(proxies[:i], proxies[i+1:]...)
 		}
 	}
 
-	log.Info("check end %v proxies", aliveCount)
+	sort.Slice(proxies, func(i, j int) bool {
+		return proxies[i].Info.Delay < proxies[j].Info.Delay
+	})
+
+	for i := range proxies {
+		proxies[i].Id = i
+		name := fmt.Sprintf("%v %03d", proxies[i].Info.Country, proxies[i].Id)
+		if config.GlobalConfig.Rename.Flag {
+			proxies[i].CountryFlag()
+			name = fmt.Sprintf("%v %v", proxies[i].Info.Flag, name)
+		}
+		proxies[i].ParseRate()
+		if proxies[i].Info.Rate != 0 {
+			name = fmt.Sprintf("%v x%.2f", name, proxies[i].Info.Rate)
+		}
+		proxies[i].Raw["name"] = name
+	}
+
+	log.Info("check end %v proxies", len(proxies))
 
 	if utils.Contains(config.GlobalConfig.Check.Items, "speed") {
 		log.Info("start speed test")
 		pool.Tune(config.GlobalConfig.Check.SpeedCheckConcurrent)
-		for i := range proxies {
-			if proxies[i].Info.Alive {
+		var speedCount int
+		for i := 0; i < len(proxies); i++ {
+			if speedCount < config.GlobalConfig.Check.SpeedCount {
 				wg.Add(1)
 				pool.Submit(func() {
 					defer wg.Done()
 					proxySpeedTask(&proxies[i])
+					log.Info("proxy %v speed %v count %v", proxies[i].Raw["name"], proxies[i].Info.Speed, speedCount)
+					if proxies[i].Info.Speed > config.GlobalConfig.Check.MinSpeed {
+						speedCount++
+						var speedStr string
+						switch {
+						case proxies[i].Info.Speed < 1024:
+							speedStr = fmt.Sprintf("%d KB/s", proxies[i].Info.Speed)
+						case proxies[i].Info.Speed < 1024*1024:
+							speedStr = fmt.Sprintf("%.2f MB/s", float64(proxies[i].Info.Speed)/1024)
+						default:
+							speedStr = fmt.Sprintf("%.2f GB/s", float64(proxies[i].Info.Speed)/(1024*1024))
+						}
+						proxies[i].Raw["name"] = fmt.Sprintf("%v | ⬇️ %s", proxies[i].Raw["name"], speedStr)
+					} else {
+						proxies[i].Info.SpeedSkip = true
+					}
 				})
+			} else {
+				proxies[i].Info.SpeedSkip = true
 			}
 		}
 		wg.Wait()
 		log.Info("end speed test")
 	}
-
-	log.Info("start rename proxies")
-	pool.Tune(config.GlobalConfig.Check.Concurrent)
-	for i := range proxies {
-		if proxies[i].Info.Alive {
-			wg.Add(1)
-			pool.Submit(func() {
-				defer wg.Done()
-				proxyRenameTask(&proxies[i])
-			})
-		}
-	}
-	wg.Wait()
-
-	log.Info("end rename proxies")
 
 	saver.SaveConfig(&proxies)
 
@@ -259,7 +281,6 @@ func maintask() {
 
 	pool.Release()
 
-	runtime.GC()
 }
 
 func proxyCheckTask(proxy *info.Proxy) {
@@ -269,41 +290,34 @@ func proxyCheckTask(proxy *info.Proxy) {
 	defer proxy.Close()
 	checker := checker.NewChecker(proxy)
 	defer checker.Close()
+	aliveCount := 0
+	totalDelay := uint16(0)
 	for i := 0; i < 3; i++ {
 		checker.AliveTest("https://gstatic.com/generate_204", 204)
 		if proxy.Info.Alive {
-			break
+			aliveCount++
+			totalDelay += proxy.Info.Delay
 		}
 	}
-	if proxy.Info.Alive {
-		for _, item := range config.GlobalConfig.Check.Items {
-			switch item {
-			case "openai":
-				checker.OpenaiTest()
-			case "youtube":
-				checker.YoutubeTest()
-			case "netflix":
-				checker.NetflixTest()
-			case "disney":
-				checker.DisneyTest()
-			}
+
+	if aliveCount == 0 {
+		return
+	}
+
+	proxy.Info.Delay = totalDelay / uint16(aliveCount)
+
+	for _, item := range config.GlobalConfig.Check.Items {
+		switch item {
+		case "openai":
+			checker.OpenaiTest()
+		case "youtube":
+			checker.YoutubeTest()
+		case "netflix":
+			checker.NetflixTest()
+		case "disney":
+			checker.DisneyTest()
 		}
 	}
-}
-func proxySpeedTask(proxy *info.Proxy) {
-	if proxy.New() != nil {
-		return
-	}
-	defer proxy.Close()
-	checker := checker.NewChecker(proxy)
-	defer checker.Close()
-	checker.CheckSpeed()
-}
-func proxyRenameTask(proxy *info.Proxy) {
-	if proxy.New() != nil {
-		return
-	}
-	defer proxy.Close()
 	switch config.GlobalConfig.Rename.Method {
 	case "api":
 		proxy.CountryCodeFromApi()
@@ -316,33 +330,16 @@ func proxyRenameTask(proxy *info.Proxy) {
 		}
 	}
 
-	name := fmt.Sprintf("%v %03d", proxy.Info.Country, proxy.Id)
-	if config.GlobalConfig.Rename.Flag {
-		proxy.CountryFlag()
-		name = fmt.Sprintf("%v %v", proxy.Info.Flag, name)
+}
+func proxySpeedTask(proxy *info.Proxy) {
+	if proxy.New() != nil {
+		return
 	}
+	defer proxy.Close()
+	checker := checker.NewChecker(proxy)
+	defer checker.Close()
+	checker.CheckSpeed()
 
-	proxy.ParseRate()
-
-	if proxy.Info.Rate != 0 {
-		name = fmt.Sprintf("%v x%.2f", name, proxy.Info.Rate)
-	}
-
-	if utils.Contains(config.GlobalConfig.Check.Items, "speed") && !proxy.Info.SpeedSkip {
-		speed := proxy.Info.Speed
-		var speedStr string
-		switch {
-		case speed < 1024:
-			speedStr = fmt.Sprintf("%d KB/s", speed)
-		case speed < 1024*1024:
-			speedStr = fmt.Sprintf("%.2f MB/s", float64(speed)/1024)
-		default:
-			speedStr = fmt.Sprintf("%.2f GB/s", float64(speed)/(1024*1024))
-		}
-		name = fmt.Sprintf("%v | ⬇️ %s", name, speedStr)
-	}
-
-	proxy.Raw["name"] = name
 }
 
 var version string
@@ -414,9 +411,17 @@ func checkConfig() {
 	} else {
 		log.Info("check items: %v", config.GlobalConfig.Check.Items)
 		if utils.Contains(config.GlobalConfig.Check.Items, "speed") {
-			log.Info("speed check concurrent: %v", config.GlobalConfig.Check.SpeedCheckConcurrent)
+			log.Info(" - speed test concurrent: %v", config.GlobalConfig.Check.SpeedCheckConcurrent)
+			log.Info(" - speed test download size: %v MB", config.GlobalConfig.Check.DownloadSize)
+			log.Info(" - speed test download timeout: %v seconds", config.GlobalConfig.Check.DownloadTimeout)
+			log.Info(" - speed test count: %v", config.GlobalConfig.Check.SpeedCount)
+			if len(config.GlobalConfig.Check.SpeedTestUrl) == 0 {
+				log.Error("no speed test URLs available")
+				os.Exit(1)
+			}
 		}
 	}
+
 	if config.GlobalConfig.MihomoApiUrl != "" {
 		version, err := utils.GetVersion()
 		if err != nil {
