@@ -25,7 +25,7 @@ import (
 var mihomoProxiesMutex sync.Mutex
 
 func GetProxies(proxies *[]info.Proxy) {
-	log.Info("currently, there are %d subscription links set", len(config.GlobalConfig.SubUrls))
+	log.Info("subscription links count: %v", len(config.GlobalConfig.SubUrls))
 	numWorkers := min(len(config.GlobalConfig.SubUrls), config.GlobalConfig.Check.Concurrent)
 
 	pool, _ := ants.NewPool(numWorkers)
